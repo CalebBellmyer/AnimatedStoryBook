@@ -4,83 +4,75 @@
 //
 //  Created by Caleb Bellmyer on 4/30/25.
 //
+//
 
 import SwiftUI
-import CoreData
+
 
 struct ContentView: View {
-    @Environment(\.managedObjectContext) private var viewContext
+    @State private var colorSchemeOverride: ColorScheme? = nil
+    @Environment(\.colorScheme) var currentScheme
+    @State private var overlayOpacity: Double = 0.0
+    @State private var previousSchemeSnapshot: ColorScheme = .light
+    private var overlayBackgroundColor: Color {
+        previousSchemeSnapshot == .dark ? Color(UIColor.systemBackground) : Color(UIColor.systemBackground)
+    }
 
-    @FetchRequest(
-        sortDescriptors: [NSSortDescriptor(keyPath: \Item.timestamp, ascending: true)],
-        animation: .default)
-    private var items: FetchedResults<Item>
+    private var toggleButtonIconName: String {
+        let nextScheme: ColorScheme
+        if let override = colorSchemeOverride {
+            nextScheme = (override == .light) ? .dark : .light
+        } else {
+            nextScheme = (currentScheme == .light) ? .dark : .light
+        }
+        return nextScheme == .light ? "sun.max.fill" : "moon.fill"
+    }
 
     var body: some View {
-        NavigationView {
-            List {
-                ForEach(items) { item in
-                    NavigationLink {
-                        Text("Item at \(item.timestamp!, formatter: itemFormatter)")
-                    } label: {
-                        Text(item.timestamp!, formatter: itemFormatter)
-                    }
+        ZStack(alignment: .top) {
+            StoryBookView(pages: samplePages)
+                .preferredColorScheme(colorSchemeOverride)
+            Button {
+                let newOverride: ColorScheme?
+                if let currentOverride = colorSchemeOverride {
+                    newOverride = (currentOverride == .light) ? .dark : .light
+                } else {
+                    newOverride = (currentScheme == .light) ? .dark : .light
                 }
-                .onDelete(perform: deleteItems)
+                colorSchemeOverride = newOverride
+
+            } label: {
+                Image(systemName: toggleButtonIconName)
+                    .font(.title2)
+                    .padding(10)
+                    .background(.regularMaterial)
+                    .clipShape(Circle())
+                    .shadow(radius: 3)
             }
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    EditButton()
-                }
-                ToolbarItem {
-                    Button(action: addItem) {
-                        Label("Add Item", systemImage: "plus")
-                    }
-                }
-            }
-            Text("Select an item")
+            .padding(.top, 10)
+
+            Rectangle()
+                .fill(overlayBackgroundColor)
+                .opacity(overlayOpacity)
+                .ignoresSafeArea()
+                .allowsHitTesting(false)
         }
-    }
-
-    private func addItem() {
-        withAnimation {
-            let newItem = Item(context: viewContext)
-            newItem.timestamp = Date()
-
-            do {
-                try viewContext.save()
-            } catch {
-                // Replace this implementation with code to handle the error appropriately.
-                // fatalError() causes the application to generate a crash log and terminate. You should not use this function in a shipping application, although it may be useful during development.
-                let nsError = error as NSError
-                fatalError("Unresolved error \(nsError), \(nsError.userInfo)")
+        .ignoresSafeArea(.container, edges: .bottom)
+        .onChange(of: currentScheme) { oldScheme, newScheme in
+            if oldScheme != newScheme {
+                 previousSchemeSnapshot = oldScheme
+                 overlayOpacity = 1.0
+                 withAnimation(.easeInOut(duration: 0.6)) {
+                     overlayOpacity = 0.0
+                 }
             }
         }
-    }
-
-    private func deleteItems(offsets: IndexSet) {
-        withAnimation {
-            offsets.map { items[$0] }.forEach(viewContext.delete)
-
-            do {
-                try viewContext.save()
-            } catch {
-                // Replace this implementation with code to handle the error appropriately.
-                // fatalError() causes the application to generate a crash log and terminate. You should not use this function in a shipping application, although it may be useful during development.
-                let nsError = error as NSError
-                fatalError("Unresolved error \(nsError), \(nsError.userInfo)")
-            }
+        .onAppear {
+             previousSchemeSnapshot = currentScheme
         }
     }
 }
 
-private let itemFormatter: DateFormatter = {
-    let formatter = DateFormatter()
-    formatter.dateStyle = .short
-    formatter.timeStyle = .medium
-    return formatter
-}()
-
 #Preview {
-    ContentView().environment(\.managedObjectContext, PersistenceController.preview.container.viewContext)
+    ContentView()
 }
